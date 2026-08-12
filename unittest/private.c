@@ -216,6 +216,95 @@ START_TEST(test_parse_http_message)
 END_TEST
 
 
+static void
+test_get_request_framing_case(const char *request,
+                              int expected_result,
+                              int expected_error,
+                              int expected_is_chunked,
+                              int64_t expected_content_len,
+                              int64_t expected_request_content_len)
+{
+	struct mg_context ctx;
+	struct mg_connection conn;
+	char request_buffer[256];
+	char error_buffer[128];
+	size_t request_len = strlen(request);
+	int error = -1;
+	int result;
+
+	ck_assert_int_lt((int)request_len, (int)sizeof(request_buffer));
+	memset(&ctx, 0, sizeof(ctx));
+	memset(&conn, 0, sizeof(conn));
+	memset(request_buffer, 0, sizeof(request_buffer));
+	memcpy(request_buffer, request, request_len);
+
+	conn.phys_ctx = &ctx;
+	conn.dom_ctx = &(ctx.dd);
+	conn.buf = request_buffer;
+	conn.buf_size = (int)sizeof(request_buffer);
+	conn.data_len = (int)request_len;
+
+	result = get_request(&conn, error_buffer, sizeof(error_buffer), &error);
+
+	ck_assert_int_eq(result, expected_result);
+	ck_assert_int_eq(error, expected_error);
+	ck_assert_int_eq(conn.is_chunked, expected_is_chunked);
+	ck_assert_int_eq(conn.content_len, expected_content_len);
+	ck_assert_int_eq(conn.request_info.content_length,
+	                 expected_request_content_len);
+}
+
+
+START_TEST(test_get_request_framing)
+{
+	test_get_request_framing_case("POST / HTTP/1.1\r\n"
+	                              "Transfer-Encoding: chunked\r\n\r\n",
+	                              1,
+	                              0,
+	                              1,
+	                              0,
+	                              -1);
+	test_get_request_framing_case("POST / HTTP/1.1\r\n"
+	                              "Transfer-Encoding: identity\r\n"
+	                              "Content-Length: 7\r\n\r\n",
+	                              1,
+	                              0,
+	                              0,
+	                              7,
+	                              7);
+	test_get_request_framing_case("POST / HTTP/1.1\r\n"
+	                              "Transfer-Encoding: chunked\r\n"
+	                              "Content-Length: 7\r\n\r\n",
+	                              0,
+	                              400,
+	                              0,
+	                              -1,
+	                              -1);
+	test_get_request_framing_case("POST / HTTP/1.1\r\n"
+	                              "Transfer-Encoding: gzip\r\n\r\n",
+	                              0,
+	                              400,
+	                              0,
+	                              -1,
+	                              -1);
+	test_get_request_framing_case("POST / HTTP/1.1\r\n"
+	                              "Content-Length: abc\r\n\r\n",
+	                              0,
+	                              411,
+	                              0,
+	                              0,
+	                              -1);
+	test_get_request_framing_case("POST / HTTP/1.1\r\n"
+	                              "Content-Length: -1\r\n\r\n",
+	                              0,
+	                              411,
+	                              0,
+	                              -1,
+	                              -1);
+}
+END_TEST
+
+
 START_TEST(test_should_keep_alive)
 {
 	/* Adapted from unit_test.c */
@@ -1750,6 +1839,7 @@ make_private_suite(void)
 	TCase *const tcase_config_options = tcase_create("Config Options");
 
 	tcase_add_test(tcase_http_message, test_parse_http_message);
+	tcase_add_test(tcase_http_message, test_get_request_framing);
 	tcase_set_timeout(tcase_http_message, civetweb_min_test_timeout);
 	suite_add_tcase(suite, tcase_http_message);
 
