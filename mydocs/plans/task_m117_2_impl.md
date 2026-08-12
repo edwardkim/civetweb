@@ -11,12 +11,13 @@ GitHub Issue: [#2](https://github.com/edwardkim/civetweb/issues/2)
 | 1 | 최소 컴파일 수정과 출처 보존 | `src/civetweb.c` | 기본 Make 빌드, diff·경고 확인 |
 | 2 | 요청 프레이밍 회귀 테스트 | `unittest/private.c` | targeted CTest, 전체 CTest |
 | 3 | 통합 빌드 검증과 fork 게시 준비 | 검증 로그 요약과 Stage 보고서 | Make 기본·전체 기능, CMake/CTest, Docker, branch diff |
+| 4 | 기존 PR의 CI 실행 기반 복구 | `cibuild.yml`, CI 재검증 | workflow 정적 검사, 기존 PR Actions |
 
 ## 작업 공간 및 문서 위치 확인
 
 | 구분 | branch | worktree | commit 대상 | 일치 여부 |
 |---|---|---|---|---|
-| 제품 소스·테스트 | `local/task2` | `/home/edward/vsworks/myweb/civetweb-task2` | `src/civetweb.c`, `unittest/private.c` | OK |
+| 제품 소스·테스트·공용 CI | `local/task2` | `/home/edward/vsworks/myweb/civetweb-task2` | `src/civetweb.c`, `unittest/private.c`, `.github/workflows/cibuild.yml` | OK |
 | 개인 운영 문서 | `personal/task2` | `/home/edward/vsworks/myweb/civetweb-workflow-task2` | `mydocs/` 산출물 | OK |
 | 기존 Task #1 문서 | `local/task1` | `/home/edward/vsworks/myweb/civetweb-workflow` | 변경하지 않음 | OK |
 
@@ -233,6 +234,57 @@ Task #2 Stage 3: 통합 빌드 검증 완료보고서
 
 Stage 3 완료보고서 승인 전에는 최종 결과보고서, push 또는 fork 내부 PR을 만들지 않는다.
 
+## Stage 4 — 기존 PR의 CI 실행 기반 복구
+
+PR #3 게시 후 확인된 CI 실패를 같은 Task와 PR 안에서 복구한다. 이 단계는 별도 이슈나 별도 PR을 만들지 않는다.
+
+### 산출물
+
+기존 source branch와 PR #3:
+
+- `.github/workflows/cibuild.yml`의 macOS OpenSSL 3 전환
+
+개인 운영 branch:
+
+- `.github/workflows/cibuild.yml`의 `personal/hyper-waterfall` push 제외
+- source branch와 동일한 macOS OpenSSL 3 전환
+- `mydocs/working/task_m117_2_stage4.md`
+- 갱신된 최종 결과보고서와 오늘할일
+
+### 변경 내용
+
+1. source branch의 macOS NoDynLoad matrix를 OpenSSL 1.1에서 OpenSSL 3으로 바꾼다.
+2. 중복된 `OSX-Package_OpenSSL_1_1` matrix 항목과 macOS OpenSSL 1.1 setup step을 제거한다.
+3. OpenSSL 3 setup 주석은 현재 Homebrew 상태를 설명하는 영어로 수정한다.
+4. 개인 branch에는 위 변경과 함께 `push.branches-ignore: personal/hyper-waterfall`을 추가한다.
+5. branch 제외 조건은 source branch와 PR #3에 포함하지 않는다.
+6. CIFuzz, Linux matrix와 `fail-fast`는 변경하지 않는다.
+
+### 검증
+
+```bash
+git diff --check
+actionlint .github/workflows/cibuild.yml  # 설치되어 있는 경우
+git diff -- .github/workflows/cibuild.yml
+git status --short --branch
+```
+
+게시 뒤에는 새 PR을 만들지 않고 기존 PR #3의 checks와 개인 branch push event만 확인한다.
+
+### 커밋
+
+source branch와 기존 PR #3:
+
+```text
+Task #2 Stage 4: macOS CI를 OpenSSL 3으로 전환
+```
+
+개인 운영 branch:
+
+```text
+Task #2 Stage 4: 개인 branch CI 제외와 결과 기록
+```
+
 ## 통합 검증
 
 - 각 Stage 검증 명령은 해당 단계 보고서 작성 전에 실행한다.
@@ -247,6 +299,7 @@ Stage 3 완료보고서 승인 전에는 최종 결과보고서, push 또는 for
 
 1. `Task #2 Stage 1: get_request 컴파일 오류 수정`
 2. `Task #2 Stage 2: 요청 프레이밍 회귀 테스트 추가`
+3. `Task #2 Stage 4: macOS CI를 OpenSSL 3으로 전환`
 
 문서 branch 예상 commit:
 
@@ -264,6 +317,7 @@ Stage 1 commit은 결합 patch이므로 기존 두 저작자를 `Co-authored-by`
 - Stage 3은 Stage 2 검증·완료보고서와 작업지시자 승인 후 시작한다.
 - 최종 결과보고서는 Stage 3 완료보고서 승인 후 별도 절차로 작성한다.
 - `publish/task2` push와 fork 내부 PR은 최종 결과보고서 승인 후 별도 승인 게이트에서 수행한다.
+- Stage 4는 게시된 PR의 CI 실패를 근거로 작업지시자가 범위를 보정한 재개 단계다. 새 이슈·브랜치·PR을 만들지 않는다.
 
 ## 위험과 대응
 
@@ -274,6 +328,8 @@ Stage 1 commit은 결합 patch이므로 기존 두 저작자를 `Co-authored-by`
 - **CI와 로컬 환경 차이**: GCC 기반 Make, CMake/CTest, Alpine Docker를 함께 통과시키고 upstream PR CI 결과와 비교한다.
 - **검증 산출물 혼입**: `output/`, Make 산출물, Docker image를 commit하지 않고 source diff 파일 목록을 강제 확인한다.
 - **문서 branch 병합 충돌**: Task #1과 Task #2의 orders 행을 각 branch에서 보존하고 `personal/hyper-waterfall` 통합은 별도 승인 후 수행한다.
+- **CI 복구의 재귀적 PR 생성**: 실패 workflow를 고치는 별도 PR을 만들지 않고 기존 PR #3에 commit을 추가한다.
+- **개인 branch filter 혼입**: source branch에는 OpenSSL 3 변경만 적용하고 `personal/hyper-waterfall` 제외는 개인 branch에만 적용한다.
 
 ## 승인 요청 사항
 

@@ -31,11 +31,15 @@ upstream에는 동일 현상을 다루는 이슈 #1386, #1388, #1408과 PR #1385
 - 기존 PR의 패치 또는 논리를 재사용할 경우 원 저작자와 참고 PR을 커밋·보고서에 명시한다.
 - 새로 작성하거나 수정하는 소스 주석은 영어로 작성한다.
 - 최종 승인 뒤에만 `publish/task2`를 fork에 게시하고 `edwardkim/civetweb:master` 대상 내부 PR을 준비한다.
+- 게시된 PR #3의 CI 검증을 막는 macOS OpenSSL 1.1 matrix를 OpenSSL 3으로 전환한다.
+- fork 전용 `personal/hyper-waterfall` push는 `CI build` 대상에서 제외한다.
+- CI 보정은 새 이슈나 새 PR로 분리하지 않고 기존 Task #2와 PR #3의 검증 보완으로 처리한다.
 
 ### 제외
 
 - 이번 task에서 `civetweb/civetweb` upstream PR, issue 댓글 또는 review를 게시하지 않는다.
-- `src/handle_form.inl`, CI workflow, OpenSSL 설정과 관련 없는 컴파일 경고를 수정하지 않는다.
+- `src/handle_form.inl`과 OpenSSL 설정과 관련 없는 컴파일 경고를 수정하지 않는다.
+- CIFuzz의 upstream 저장소 고정 checkout 문제와 `fail-fast` 정책은 수정하지 않는다.
 - API, 멀티스레딩, 구조 또는 요청 프레이밍 정책 자체를 변경하지 않는다.
 - 개인 전용 `AGENTS.md` 심볼릭 링크가 Docker context에 미치는 문제를 제품 Dockerfile 변경으로 해결하지 않는다.
 - Hyper-Waterfall Task #1의 branch, 계획서 또는 migration 변경을 포함하지 않는다.
@@ -57,6 +61,7 @@ upstream에는 동일 현상을 다루는 이슈 #1386, #1388, #1408과 PR #1385
 
 - `src/civetweb.c`
 - `unittest/private.c`
+- `.github/workflows/cibuild.yml` — 기존 PR에는 macOS OpenSSL 3 전환만 포함
 
 조건부 소스 수정(기존 private fixture로 검증할 수 없는 경우에만 별도 승인):
 
@@ -70,10 +75,11 @@ upstream에는 동일 현상을 다루는 이슈 #1386, #1388, #1408과 PR #1385
 - `mydocs/plans/task_m117_2_impl.md`
 - `mydocs/working/task_m117_2_stage{N}.md`
 - `mydocs/report/task_m117_2_report.md`
+- `.github/workflows/cibuild.yml` — `personal/hyper-waterfall` branch에는 fork 전용 push 제외 조건을 추가
 
 변경하지 않음:
 
-- `Dockerfile`, `docs/`, `.github/workflows/`, `src/handle_form.inl`
+- `Dockerfile`, `docs/`, `.github/workflows/cifuzz.yml`, `src/handle_form.inl`
 
 ## 잠정 단계
 
@@ -89,6 +95,11 @@ upstream에는 동일 현상을 다루는 이슈 #1386, #1388, #1408과 PR #1385
   - Make 기본·전체 기능, CMake/CTest, Docker 빌드를 깨끗한 Task #2 worktree에서 실행한다.
   - `upstream/master...local/task2` diff에 승인된 소스·테스트 파일만 포함되는지 확인한다.
   - 최종 보고 승인 뒤 사용할 fork 내부 `publish/task2` 게시 범위와 기존 upstream PR 중복 상태를 정리한다.
+- **Stage 4 — 기존 PR의 CI 실행 기반 복구**
+  - `personal/hyper-waterfall` branch의 push에서 `CI build`를 제외한다.
+  - 기존 PR #3의 macOS matrix를 OpenSSL 3으로 전환하고 OpenSSL 1.1 전용 job과 setup을 제거한다.
+  - fork 전용 branch filter와 upstream에 재사용 가능한 OpenSSL 변경을 서로 다른 branch와 commit으로 유지한다.
+  - 정적 workflow 검증 뒤 기존 `publish/task2`와 `personal/hyper-waterfall`만 갱신하며 새 PR은 만들지 않는다.
 
 ## 검증 계획
 
@@ -124,6 +135,14 @@ upstream에는 동일 현상을 다루는 이슈 #1386, #1388, #1408과 PR #1385
 - `git diff --name-only upstream/master...local/task2`
 - source, workflow, 기존 Task #1 worktree의 `git status --short --branch`를 각각 확인한다.
 
+### Stage 4
+
+- `git diff --check`
+- `.github/workflows/cibuild.yml`의 matrix와 조건식을 수동 대조한다.
+- 사용 가능하면 `actionlint`로 workflow를 정적 검증한다.
+- source branch diff에는 macOS OpenSSL 3 전환만, 개인 branch diff에는 정확한 `personal/hyper-waterfall` push 제외 조건이 포함되는지 확인한다.
+- 기존 PR #3의 GitHub Actions 결과와 `personal/hyper-waterfall` push에서 `CI build`가 생성되지 않는지 확인한다.
+
 ## 리스크
 
 - **중복 패치의 저작자 누락**: 동일 수정이 여러 upstream PR에 존재한다. 최종 patch 출처를 대조하고 실질적으로 채택한 저작자와 PR을 commit 및 보고서에 기록한다.
@@ -133,6 +152,8 @@ upstream에는 동일 현상을 다루는 이슈 #1386, #1388, #1408과 PR #1385
 - **로컬 Docker false failure**: 메인 source worktree의 개인 symlink는 `COPY *.md`에 걸릴 수 있다. 개인 링크가 없는 전용 `civetweb-task2` worktree에서 검증해 제품 오류와 분리한다.
 - **upstream과 fork의 장기 분기**: fork 패치는 upstream 반영 전까지 별도 유지가 필요하다. upstream 변경을 주기적으로 재확인하고 추후 게시 시 중복·충돌을 다시 평가한다.
 - **병렬 Task 문서 충돌**: Task #1과 Task #2가 같은 날짜의 orders 파일을 만든다. 각 문서 branch를 분리하고 `personal/hyper-waterfall` 통합 시 두 행을 보존하는 병합을 별도 승인 게이트에서 수행한다.
+- **CI 복구의 순환 PR화**: CI 오류를 별도 이슈와 PR로 분리하면 그 PR도 같은 실패 workflow에 의존한다. 기존 Task #2와 PR #3 안에서 복구하고 별도 PR을 만들지 않는다.
+- **fork 전용 설정의 upstream 혼입**: `personal/hyper-waterfall` 제외 조건은 개인 branch에만 commit하고 기존 PR #3에는 포함하지 않는다.
 
 ## 승인 요청 사항
 
